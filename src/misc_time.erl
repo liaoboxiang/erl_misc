@@ -16,6 +16,7 @@
 -type datetime():: {date(), time()}.
 -type datenum() :: integer().	%% 日期YYYYMMDD 20180316
 
+-type division_time() :: integer().	%% 分割的时间点(整点 小时),  0=< DivisionTime =< 23
 
 -define(DIFF_SECONDS_0000_1900,	62167219200).
 
@@ -32,18 +33,28 @@
 		 unixtime_to_localtime/1,
 		 unixtime_to_date_num/1,
 		 week/0,				%% 星期几
-		 week/1,				%% 星期几
-		 week/3,				%% 星期几
-		 get_diff_days/2,		%% 相差的天数
-		 date_num_to_unixtime/1,	
-		 date_time_to_unixtime/1,
+		 week/1,				
+		 week/3,				
+		 get_diff_days_by_unixtime/2,	%% 相差的天数
+		 get_diff_days_by_datenum/2,	
+		 get_diff_days_by_date/2,		
+		 date_num_to_date/1,		%% {Y,M,D} -> YYYYMMDD
+		 date_num_to_unixtime/1,	%% {Y,M,D} -> Unixtime
+		 date_time_to_unixtime/1,	%% {{Y,M,D}, {H,Min,S}} -> Unixtime
 		 midnight/0,			%% 获取当天的零点时间
 		 next_daytime/0,		%% 距离明天还有多少秒 
 		 next_daytime/1,
 		 next_weektime/0,		%% 距离下周1零点还有多少秒
 		 next_weektime/2,
-		 next_monthtime/0,
+		 next_monthtime/0,		%% 距离下个月1号还有多少秒 
 		 next_monthtime/1
+		]).
+
+-export([
+		 get_date_num_by_time_division/1,
+		 get_date_num_by_time_division/2,
+		 get_diff_days_by_time_division/3,
+		 get_today_left_time_by_time_division/1
 		]).
 
 
@@ -89,7 +100,7 @@ unixtime_to_localtime(UnixTime) ->
 	calendar:universal_time_to_local_time(DateTime).
 %% 根据秒数获得日期 --20120630
 unixtime_to_date_num(UnixTime) ->
-	{{Y, M, D}, {_, _, _}} = unixtime_to_date_num(UnixTime),
+	{{Y, M, D}, {_, _, _}} = unixtime_to_localtime(UnixTime),
 	Y * 10000 + M * 100 + D.
 
 %% 得到今天是星期几
@@ -109,20 +120,33 @@ week(Y, M, D) ->
 
 %% 计算相差的天数
 %% return -> Days::integer().
-get_diff_days(Seconds1, Seconds2) ->
-	{{Year1, Month1, Day1}, _} = unixtime_to_localtime(Seconds1),
-	{{Year2, Month2, Day2}, _} = unixtime_to_localtime(Seconds2),
-	Days1 = calendar:date_to_gregorian_days(Year1, Month1, Day1),
-	Days2 = calendar:date_to_gregorian_days(Year2, Month2, Day2),
+get_diff_days_by_unixtime(UnixTime1, UnixTime2) ->
+	{Date1, _} = unixtime_to_localtime(UnixTime1),
+	{Date2, _} = unixtime_to_localtime(UnixTime2),
+	get_diff_days_by_date(Date1, Date2).
+
+get_diff_days_by_datenum(Datenum1, Datenum2) ->
+	Date1 = date_num_to_date(Datenum1),
+	Date2 = date_num_to_date(Datenum2),
+	get_diff_days_by_date(Date1, Date2).
+
+get_diff_days_by_date({Y1,M1,D1}, {Y2,M2,D2}) ->
+	Days1 = calendar:date_to_gregorian_days(Y1,M1,D1),
+	Days2 = calendar:date_to_gregorian_days(Y2,M2,D2),
 	abs(Days2-Days1).
 
+%% 20180316 -> {2018, 3, 16}.
+date_num_to_date(Datenum) ->
+	Y = Datenum div 10000,
+	M = (Datenum - 10000 * Y) div 100,
+	D = (Datenum - 10000 * Y - 100 * M),
+	{Y, M, D}.
+
 %% 日期转化为当天0点秒数
-%% date_to_unixtime(20180316) ->1521129600. 
-date_num_to_unixtime(Date) ->
-	Y = Date div 10000,
-	M = (Date - 10000 * Y) div 100,
-	D = (Date - 10000 * Y - 100 * M),
-	date_time_to_unixtime({{Y, M, D}, {0, 0, 0}}).
+%% date_num_to_unixtime(20180316) ->1521129600. 
+date_num_to_unixtime(Datenum) ->
+	Date = date_num_to_date(Datenum),
+	date_time_to_unixtime({Date, {0, 0, 0}}).
 
 %% {{Y, M, D}, {H, Min, S}} -> Unixtime.
 date_time_to_unixtime({{Y, M, D}, {H, Min, S}}) ->
@@ -163,6 +187,51 @@ next_monthtime() ->
 next_monthtime({{Year, Month, Day}, {Hour, Min, Seconds}}) ->
 	TotalDay = calendar:last_day_of_the_month(Year, Month),
 	(TotalDay - Day) * 86400 + next_daytime({Hour, Min, Seconds}). 
+
+%% ====================================================================
+%% 以某个时间点来划分天 
+%% 如 4点前是前一天， 4点后是另一天
+%% _by_time_division
+%% ====================================================================
+%% 以DTime为分割线区分日期
+%% DTime点前为前一天， DTime点后是第二天
+-spec get_date_num_by_time_division(DTime::division_time()) -> Datenum::datenum().
+get_date_num_by_time_division(DTime) ->
+	{H,_,_}	= ?MODULE:time(),
+	case H < DTime of
+		true ->
+			UuixTime		= ?MODULE:now(),
+			UuixTime1		= UuixTime - 86400,
+			unixtime_to_date_num(UuixTime1);
+		_ -> 
+			?MODULE:date_num()
+	end.
+
+get_date_num_by_time_division(DTime, UnixTime) ->
+	{{Y, M, D}, {H, _, _}} = unixtime_to_localtime(UnixTime),
+	case H >= DTime of
+		true -> 
+			Y * 10000 + M * 100 + D;
+		false ->
+			Time = UnixTime - 86400,
+			unixtime_to_date_num(Time)
+	end.
+
+%% 以DTime点未分割，相隔多少天
+get_diff_days_by_time_division(DTime, UnixTime1, UnixTime2) ->
+	Datenum1 = get_date_num_by_time_division(DTime, UnixTime1),
+	Datenum2 = get_date_num_by_time_division(DTime, UnixTime2),
+	get_diff_days_by_datenum(Datenum1, Datenum2).
+
+%% 今天的剩余时间
+get_today_left_time_by_time_division(DTime) ->
+	{H, M, S} = ?MODULE:time(),
+	case H < DTime of
+		true -> DTime * 3600 - (H*3600 + M*60 + S);
+		false -> DTime * 3600 + 86400 - (H*3600 + M*60 + S)
+	end.
+
+
 
 %% ====================================================================
 %% Internal functions
