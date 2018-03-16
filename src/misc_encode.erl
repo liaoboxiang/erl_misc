@@ -20,6 +20,10 @@
 %%						同样的可以使用其他规则对unicode编码，如双字节的编码ucs-2（这种编码是包含了unicode字符库中的一部分，有一些字符没法找到），计算机按每16位去解码数据（注意大小端）， 
 %%							4字节的编码ucs-4，按32位去解码数据（注意大小端）等
 
+%% 中、日、韩的三种文字占用了Unicode中0x3000到0x9FFF的部分，判断是否带有中文的时候就可以判断字符的unicode codepoint是否在区间[12288, 40959]
+
+%% unicode字符集： https://unicode-table.com/cn/#control-character
+
 %% 所有的binary数据<<>>在shell中看到的都是utf8
 
 -module(misc_encode).
@@ -32,13 +36,17 @@
 		 is_utf8/1,				%% 是否utf8
 		 to_utf8_string/1,		%% 转成utf8字符串
 		 to_unicode_string/1,	%% 转成unicode
-		 analyze_unicode_to_utf8/1,	%% 分析unicode转成utf8的具体过程
-		 number_base_conversion/3	%% 进制转换
+		 analyze_unicode_to_utf8/1	%% 分析unicode转成utf8的具体过程
 		]).
 
 -export([
 		 gbk_to_utf8/1,
 		 utf8_to_gbk/1
+		 ]).
+
+-export([
+		 number_base_conversion/3,	%% 进制转换
+		 has_chinese/1			%% 是否包含中文字符
 		 ]).
 
 %% ===============================================================
@@ -185,6 +193,15 @@ number_base_conversion(Str, From, To) ->
 			integer_to_list(Int, To)
 	end.
 
+%% 是否包含中文字符
+%% return -> true | false
+%% StrList::[UnicodeCodePoint|...]
+%% 中、日、韩的三种文字占用了Unicode中0x3000到0x9FFF的部分，判断是否带有中文的时候就可以判断字符的unicode codepoint是否在区间[12288, 40959]
+has_chinese(StrList) ->
+	lists:any(fun(CodePoint) -> 
+					  12288 =< CodePoint andalso CodePoint =< 40959 
+			  end, StrList).
+	
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
@@ -201,6 +218,7 @@ fix_bit(String, Len) ->
 	 end.
 	
 %% 打印二进制时用，每4位用空格分割
+%% get_output_bin_str("00001111") -> "0000 1111".
 get_output_bin_str(BinStr) ->
 	%% 补齐位数
 	BinStr1 = fix_bit(BinStr, 4),
