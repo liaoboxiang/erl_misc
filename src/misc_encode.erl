@@ -1,10 +1,12 @@
 %% @author box
 %% @doc 编码相关
+
 %% uft8, unicode, gbk
 %% string(), binary()
 %% 		gbk				unicode			utf8
-%% 我 ：	0Xd2ce[206,210]	0X6211[25105]	0Xe6-88-91[230,136,145] 
-%% a:	0x61[97]		0x61[97]		0x61[97]
+%% 我 ：	0Xd2ce[206,210]	0X6211[25105]	0Xe6-88-91[230,136,145]		https://unicode-table.com/cn/6211/
+%% a:	0x61[97]		0x61[97]		0x61[97]					https://unicode-table.com/cn/0061/
+%% 注：erlang使用的unicode编码是UTF-16BE（ucs-2Big）
 
 %% unicode 包含了世界各国的文字和符号，是最全的字符集（国际标准编码），unicode的每个数字（10进制）对应一个字符
 %% gbk是中文字符集，包含所有的中文（包括繁体）及中文符号，gbk的字符集是unicode字符集的子集（就是说gbk的字符都能在unicode中找到）。但gbk的编码跟unicode并不一致，
@@ -19,8 +21,6 @@
 %%							从字符集中找出对应的2个字符"a我"
 %%						同样的可以使用其他规则对unicode编码，如双字节的编码ucs-2（这种编码是包含了unicode字符库中的一部分，有一些字符没法找到），计算机按每16位去解码数据（注意大小端）， 
 %%							4字节的编码ucs-4，按32位去解码数据（注意大小端）等
-
-%% 中、日、韩的三种文字占用了Unicode中0x3000到0x9FFF的部分，判断是否带有中文的时候就可以判断字符的unicode codepoint是否在区间[12288, 40959]
 
 %% unicode字符集： https://unicode-table.com/cn/#control-character
 
@@ -110,28 +110,28 @@ analyze_unicode_to_utf8(String) ->
 	if
 		Int =< 127 -> 
 			io:format("在第一区间， 套用模板 0XXXXXXX~n"),
-			fix_bit(Bin, 8);
+			misc_str:fix_bit(Bin, 8);
 		Int =< 2047 ->
 			io:format("在第二区间， 套用模板 110XXXXX 10XXXXXX~n"),
-			Bin1 = fix_bit(Bin, 11),
+			Bin1 = misc_str:fix_bit(Bin, 11),
 			"110" ++ string:left(Bin1, 5) ++ 
 				"10" ++ string:sub_string(Bin1, 6, 11);
 		Int =< 65535 -> 
 			io:format("在第三区间， 套用模板 1110XXXX 10XXXXXX 10XXXXXX~n"),
-			Bin1 = fix_bit(Bin, 16),
+			Bin1 = misc_str:fix_bit(Bin, 16),
 			"1110" ++ string:left(Bin1, 4) ++ 
 				"10" ++ string:sub_string(Bin1, 5, 10) ++
 				"10" ++ string:sub_string(Bin1, 11, 16);
 		true ->
 			io:format("在第四区间， 套用模板 11110XXX 10XXXXXX 10XXXXXX 10XXXXXX~n"),
-			Bin1 = fix_bit(Bin, 21),
+			Bin1 = misc_str:fix_bit(Bin, 21),
 			"11110" ++ string:left(Bin1, 3) ++ 
 				"10" ++ string:sub_string(Bin1, 4, 9) ++
 				"10" ++ string:sub_string(Bin1, 10, 15) ++
 				"10" ++ string:sub_string(Bin1, 16, 21)
 	end,
 	NewHex = misc_encode:number_base_conversion(NewBin, 2, 16),
-	NewHex1 = fix_bit(NewHex, 2),
+	NewHex1 = misc_str:fix_bit(NewHex, 2),
 	HexLen = length(NewHex1),
 	Utf8List = lists:map(fun(N) -> 
 								 Start = N*2-1,
@@ -196,32 +196,38 @@ number_base_conversion(Str, From, To) ->
 %% 是否包含中文字符
 %% return -> true | false
 %% StrList::[UnicodeCodePoint|...]
-%% 中、日、韩的三种文字占用了Unicode中0x3000到0x9FFF的部分，判断是否带有中文的时候就可以判断字符的unicode codepoint是否在区间[12288, 40959]
+%% 中、日、韩的三种文字占用了Unicode中2E80到0x9FFF的部分，判断是否带有中文的时候就可以判断字符的unicode codepoint是否在区间[11904, 40959]
+%% 2E80—2EFF 中日韩部首补充
+%% 2F00—2FDF 康熙部首
+%% 2FF0—2FFF 表意文字描述符
+%% 3000—303F 中日韩符号和标点
+%% 3040—309F 日文平假名
+%% 30A0—30FF 日文片假名
+%% 3100—312F 注音字母
+%% 3130—318F 谚文兼容字母
+%% 3190—319F 象形字注释标志
+%% 31A0—31BF 注音字母扩展
+%% 31C0—31EF 中日韩笔画
+%% 31F0—31FF 日文片假名语音扩展
+%% 3200—32FF 带圈中日韩字母和月份
+%% 3300—33FF 中日韩字符集兼容
+%% 3400—4DBF 中日韩统一表意文字扩展A
+%% 4DC0—4DFF 易经六十四卦符号
+%% 4E00—9FFF 中日韩统一表意文字 
 has_chinese(StrList) ->
 	lists:any(fun(CodePoint) -> 
-					  12288 =< CodePoint andalso CodePoint =< 40959 
+					  11904 =< CodePoint andalso CodePoint =< 40959 
 			  end, StrList).
 	
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-%% 补齐位数, 前面补0
-%% Len::共多少位
-%% fix_bit("11", 4) -> "0011".
-%% fix_bit("11111", 4) -> "00011111".
-fix_bit(String, Len) ->
-	%% 补位（不足n*Len位的前面补0）
-	case length(String) rem Len of
-		 0 -> String;
-		 N -> 
-			 lists:flatten(lists:duplicate(Len-N, "0")) ++ String
-	 end.
 	
 %% 打印二进制时用，每4位用空格分割
 %% get_output_bin_str("00001111") -> "0000 1111".
 get_output_bin_str(BinStr) ->
 	%% 补齐位数
-	BinStr1 = fix_bit(BinStr, 4),
+	BinStr1 = misc_str:fix_bit(BinStr, 4),
 	Len = length(BinStr1),
 	List = lists:map(fun(N) -> 
 					  Start = N*4-3,
