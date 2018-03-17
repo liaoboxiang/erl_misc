@@ -20,6 +20,7 @@
 
 -define(DIFF_SECONDS_0000_1900,	62167219200).
 
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
@@ -30,7 +31,7 @@
 		 date_tuple/0,			%% {Y,M,D}
 		 time/0,				%% {H, Min, S}
 		 localtime/0,			%% {{Y,M,D}, {H, Min, S}}
-		 unixtime_to_localtime/1,
+		 unixtime_to_date_time/1,
 		 unixtime_to_date_num/1,
 		 week/0,				%% 星期几
 		 week/1,				
@@ -57,6 +58,12 @@
 		 get_today_left_time_by_time_division/1
 		]).
 
+-export([
+		 format_unixtime/2,
+		 format_datenum/2,
+		 format_date/2,
+		 format_time/2
+		 ]).
 
 %% 获取现在的时间戳(秒)
 -spec now() -> Unixtime::unixtime().
@@ -77,13 +84,13 @@ date_num() ->
 
 %% 得到现在日期{年,月,日}
 date_tuple() ->
-	{Date, _Time}	= unixtime_to_localtime(?MODULE:now()),
+	{Date, _Time}	= unixtime_to_date_time(?MODULE:now()),
 	Date.
  
 %% 得到现在时间{时,分,秒}
 -spec time() -> time().
 time() ->
-	{_Date, Time}	= unixtime_to_localtime(?MODULE:now()),	
+	{_Date, Time}	= unixtime_to_date_time(?MODULE:now()),	
 	Time.
 
 %% return -> datetime()
@@ -94,13 +101,13 @@ localtime() ->
 %% 根据1970年以来的秒数获得日期
 %% ===================================================================
 %% return -> {{2018,3,16},{15,16,17}}
--spec unixtime_to_localtime(UnixTime::unixtime()) -> Localtime::datetime().
-unixtime_to_localtime(UnixTime) ->
+-spec unixtime_to_date_time(UnixTime::unixtime()) -> Localtime::datetime().
+unixtime_to_date_time(UnixTime) ->
 	DateTime = calendar:gregorian_seconds_to_datetime(UnixTime + ?DIFF_SECONDS_0000_1900),
 	calendar:universal_time_to_local_time(DateTime).
 %% 根据秒数获得日期 --20120630
 unixtime_to_date_num(UnixTime) ->
-	{{Y, M, D}, {_, _, _}} = unixtime_to_localtime(UnixTime),
+	{{Y, M, D}, {_, _, _}} = unixtime_to_date_time(UnixTime),
 	Y * 10000 + M * 100 + D.
 
 %% 得到今天是星期几
@@ -121,8 +128,8 @@ week(Y, M, D) ->
 %% 计算相差的天数
 %% return -> Days::integer().
 get_diff_days_by_unixtime(UnixTime1, UnixTime2) ->
-	{Date1, _} = unixtime_to_localtime(UnixTime1),
-	{Date2, _} = unixtime_to_localtime(UnixTime2),
+	{Date1, _} = unixtime_to_date_time(UnixTime1),
+	{Date2, _} = unixtime_to_date_time(UnixTime2),
 	get_diff_days_by_date(Date1, Date2).
 
 get_diff_days_by_datenum(Datenum1, Datenum2) ->
@@ -208,7 +215,7 @@ get_date_num_by_time_division(DTime) ->
 	end.
 
 get_date_num_by_time_division(DTime, UnixTime) ->
-	{{Y, M, D}, {H, _, _}} = unixtime_to_localtime(UnixTime),
+	{{Y, M, D}, {H, _, _}} = unixtime_to_date_time(UnixTime),
 	case H >= DTime of
 		true -> 
 			Y * 10000 + M * 100 + D;
@@ -232,6 +239,104 @@ get_today_left_time_by_time_division(DTime) ->
 	end.
 
 
+%% ====================================================================
+%% 格式化时间
+%% Format:: DateFormat | DateFormat++" "++TimeFormat | TimeFormat.
+%% FormatDate:: "yyyymmdd" | "yyyy/mm/dd" | "yyyy-mm-dd" | "年月日"
+%% FormatTime:: "hh" | "hh:ii" | "hh:ii:ss" | "hhiiss"
+%% "yyyymmdd" 和 "hhiiss"首位会有"0"，其余的首位不会有"0"("00"的情况下只有一个"0")， 如 "20180301 010503", "2018/13/1", "1:5:3", "0:0:0"
+%% ====================================================================
+%% Unixtime::unixtime()
+%% return -> UnicodeStr
+format_unixtime(Unixtime, Format) ->
+	DateTime = unixtime_to_date_time(Unixtime),
+	format_date_time(DateTime, Format).
+
+%% Datenum::datenum()
+format_datenum(Datenum, Format) ->
+	Date = ?MODULE:date_num_to_date(Datenum),
+	format_date(Date, Format).
+
+%% Date::date()
+format_date(Date, Format) ->
+	format_date_time({Date, {0,0,0}}, Format).
+
+%% DateTime::datetime()
+format_date_time(DateTime, Format) ->
+	{Date, Time} = DateTime,
+	case string:tokens(Format, " ") of
+		[DateFormat, TimeFormat] ->
+			do_format_date(Date, DateFormat) ++ " " ++ format_time(Time, TimeFormat);
+		[Format] ->
+			case is_date_format(Format) of
+				true -> do_format_date(Date, Format);
+				false -> format_time(Time, Format)
+			end
+	end.
+
+%% Time::time().
+format_time({H,I,S}, Format) ->
+	%% 转成小写
+	Format1 = string:to_lower(Format),
+	case Format1 of
+		"hh" -> integer_to_list(H); 
+		"hh:ii" -> integer_to_list(H) ++ ":" ++ integer_to_list(I); 
+		"hh:ii:ss" -> integer_to_list(H) ++ ":" ++ integer_to_list(I) ++ ":" ++ integer_to_list(S); 
+		"hhiiss" -> 
+			H1 = case H >= 10 of
+					 true -> integer_to_list(H);
+					 false -> "0" ++ integer_to_list(H)
+				 end,
+			I1 = case I >= 10 of
+					 true -> integer_to_list(I);
+					 false -> "0" ++ integer_to_list(I)
+				 end,
+			S1 = case S >= 10 of
+					 true -> integer_to_list(S);
+					 false -> "0" ++ integer_to_list(S)
+				 end,
+			H1 ++ I1 ++ S1
+	end.
+
+%% 仅仅对日期格式化
+%% Date::{Y,M,D}
+do_format_date({Y,M,D}, Format) ->
+	%% 转成小写
+	Format1 = string:to_lower(Format),
+	case Format1 of
+		"yyyymmdd" -> 
+			Y1 = misc_str:fix_bit(integer_to_list(Y), 4),
+			M1 = case M >= 10 of
+					 true -> integer_to_list(M);
+					 false -> "0" ++ integer_to_list(M)
+				 end,
+			D1 = case D >= 10 of
+					 true -> integer_to_list(D);
+					 false -> "0" + integer_to_list(D)
+				 end,
+			Y1 ++ M1 ++ D1;
+		"yyyy/mm/dd" -> 
+			integer_to_list(Y)++"/"++integer_to_list(M) ++"/"++integer_to_list(D); 
+		"yyyy-mm-dd" -> 
+			integer_to_list(Y)++"-"++integer_to_list(M) ++"-"++integer_to_list(D);
+		[24180,26376,26085] -> 
+			integer_to_list(Y)++"年"++integer_to_list(M) ++"月"++integer_to_list(D) ++ "日";	%% 年月日 unicode point 
+		[229,185,180,230,156,136,230,151,165] -> 
+			integer_to_list(Y)++"年"++integer_to_list(M) ++"月"++integer_to_list(D) ++ "日"%% utf8编码
+	end.
+
+%% "yyyymmdd" | "yyyy/mm/dd" | "yyyy-mm-dd" | "年月日"
+is_date_format(Format) ->
+	%% 转成小写
+	Format1 = string:to_lower(Format),
+	case Format1 of
+		"yyyymmdd" -> true;
+		"yyyy/mm/dd" -> true; 
+		"yyyy-mm-dd" -> true; 
+		[24180,26376,26085] -> true;	%% 年月日 unicode point 
+		[229,185,180,230,156,136,230,151,165] -> true;	%% utf8编码
+		_ -> false
+	end.
 
 %% ====================================================================
 %% Internal functions
