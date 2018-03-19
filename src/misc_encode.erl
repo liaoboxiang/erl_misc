@@ -228,13 +228,8 @@ has_chinese(StrList) ->
 get_output_bin_str(BinStr) ->
 	%% 补齐位数
 	BinStr1 = misc_str:fix_bit(BinStr, 4),
-	Len = length(BinStr1),
-	List = lists:map(fun(N) -> 
-					  Start = N*4-3,
-					  Stop = N * 4,
-					  string:sub_string(BinStr1, Start, Stop)
-			  end, lists:seq(1, erlang:trunc(Len/4))),
-	string:join(List, " ").
+	%% 分隔
+	misc_str:split_string(BinStr1, " ", 4).
 
 
 
