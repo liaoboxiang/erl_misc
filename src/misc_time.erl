@@ -18,7 +18,9 @@
 
 -type division_time() :: integer().	%% 分割的时间点(整点 小时),  0=< DivisionTime =< 23
 
--define(DIFF_SECONDS_0000_1900,	62167219200).
+%% unix time 定义为从格林威治时间1970年01月01日00时00分00秒起至现在的总秒数
+%% calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}}) == 62167219200
+-define(DIFF_SECONDS_0000_1970,	62167219200).
 
 
 %% ====================================================================
@@ -103,7 +105,7 @@ localtime() ->
 %% return -> {{2018,3,16},{15,16,17}}
 -spec unixtime_to_date_time(UnixTime::unixtime()) -> Localtime::datetime().
 unixtime_to_date_time(UnixTime) ->
-	DateTime = calendar:gregorian_seconds_to_datetime(UnixTime + ?DIFF_SECONDS_0000_1900),
+	DateTime = calendar:gregorian_seconds_to_datetime(UnixTime + ?DIFF_SECONDS_0000_1970),
 	calendar:universal_time_to_local_time(DateTime).
 %% 根据秒数获得日期 --20120630
 unixtime_to_date_num(UnixTime) ->
@@ -159,7 +161,7 @@ date_num_to_unixtime(Datenum) ->
 date_time_to_unixtime({{Y, M, D}, {H, Min, S}}) ->
 	[UniversalTime]	= calendar:local_time_to_universal_time_dst({{Y, M, D}, {H, Min, S}}),
 	Seconds			= calendar:datetime_to_gregorian_seconds(UniversalTime),
-	TimeGMT			= ?DIFF_SECONDS_0000_1900,
+	TimeGMT			= ?DIFF_SECONDS_0000_1970,
 	Seconds - TimeGMT.
 
 
