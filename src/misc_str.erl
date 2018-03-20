@@ -60,22 +60,22 @@ term_to_bitstring(Term) ->
 %% 用指定的符号分隔字符串（一般同于打印信息，方便看，如数字："1000,000,000"， 二进制："0000 1111"）
 %% Symbol::分隔符号
 %% Len::长度 > 0
-%% Order::顺序 asc有前往后xxx,xxx,x | desc由后往前，如数字1,000,000
+%% Dir::leading 由前往后xxx,xxx,x | trailing 由后往前，如数字1,000,000
 %% split_string("00001111", " ", 4, asc) ->  "0000 1111".
 %% split_string("1234567", ",", 3, desc) ->  "1,234,567".
 split_string(Str, Symbol, Len) ->
-	split_string(Str, Symbol, Len, asc).
-split_string(Str, Symbol, Len, Order) ->
+	split_string(Str, Symbol, Len, leading).
+split_string(Str, Symbol, Len, Dir) ->
 	StrLen = length(Str),
-	case Order of
-		asc ->
+	case Dir of
+		leading ->
 			List = lists:map(fun(N) -> 
 							  Start = N*Len-(Len-1),
 							  Stop = N * Len,
 							  string:sub_string(Str, Start, Stop)
 					  end, lists:seq(1, erlang:ceil(StrLen/Len))),
 			string:join(List, Symbol);
-		desc ->
+		trailing ->
 			Str1 = lists:reverse(Str),
 			List = lists:map(fun(N) -> 
 							  Start = N*Len-(Len-1),

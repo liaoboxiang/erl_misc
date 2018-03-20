@@ -235,6 +235,7 @@ md5(Str) ->
     lists:flatten([io_lib:format("~2.16.0b",[N]) || N <- binary_to_list(erlang:md5(Str))]).
 
 
+
 %% ====================================================================
 %% 测试
 %% ====================================================================
@@ -257,7 +258,7 @@ test(N, {M,F,A}) ->
 	ResList = ?MODULE:counter_get_all(Pid),
 	?MODULE:counter_close(Pid),
 	%% 打印输出
-	NStr = misc_str:split_string(erlang:integer_to_list(N), ",", 3, desc),
+	NStr = misc_str:split_string(erlang:integer_to_list(N), ",", 3, trailing),
 	io:format("run:~p times, use:~pms~n", [NStr,Time]),
 	ResList.
 
